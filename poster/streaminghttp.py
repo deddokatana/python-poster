@@ -65,20 +65,20 @@ class _StreamingHTTPMixin:
             blocksize = 8192
             if hasattr(value, 'read') :
                 if self.debuglevel > 0:
-                    print "sendIng a read()able"
+                    print("sendIng a read()able")
                 data = value.read(blocksize)
                 while data:
                     self.sock.sendall(data)
                     data = value.read(blocksize)
             elif hasattr(value, 'next'):
                 if self.debuglevel > 0:
-                    print "sendIng an iterable"
+                    print("sendIng an iterable")
                 for data in value:
                     self.sock.sendall(data)
             else:
                 self.sock.sendall(value)
-        except socket.error, v:
-            if v[0] == 32:
+        except socket.error as SO:
+            if SO[0] == 32:
                 self.close()
 
 class StreamingHTTPConnection(_StreamingHTTPMixin, httplib2.HTTPConnection):
