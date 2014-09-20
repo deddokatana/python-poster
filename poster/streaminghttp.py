@@ -1,6 +1,6 @@
 """Streaming HTTP uploads module.
 
-This module extends the standard httplib and urllib2 objects so that
+This module extends the standard httplib2 and urllib3 objects so that
 iterable objects can be used in the body of HTTP requests.
 
 In most cases all one should have to do is call :func:`register_openers()`
@@ -13,26 +13,28 @@ since there is no way to determine in advance the total size that will be
 yielded, and there is no way to reset an interator.
 
 Example usage:
-
+"""
+"""
 >>> from StringIO import StringIO
->>> import urllib2, poster.streaminghttp
+>>> import urllib3, poster.streaminghttp
 
 >>> opener = poster.streaminghttp.register_openers()
 
 >>> s = "Test file data"
 >>> f = StringIO(s)
 
->>> req = urllib2.Request("http://localhost:5000", f, \
+>>> req = urllib3.Request("http://localhost:5000", f, \
         {'Content-Length': len(s)})
 """
 
-import httplib, urllib2, socket
-from httplib import NotConnected
+import httplib2, urllib3, socket
+from httplib2 import HttpLib2Error
+# as NotConnected
 
 __all__ = ['StreamingHTTPConnection', 'StreamingHTTPRedirectHandler',
         'StreamingHTTPHandler', 'register_openers']
 
-if hasattr(httplib, 'HTTPS'):
+if hasattr(httplib2, 'HTTPS'):
     __all__.extend(['StreamingHTTPSHandler', 'StreamingHTTPSConnection'])
 
 class _StreamingHTTPMixin:
@@ -45,12 +47,12 @@ class _StreamingHTTPMixin:
         a .read() method, or an iterable object that supports a .next()
         method.
         """
-        # Based on python 2.6's httplib.HTTPConnection.send()
+        # Based on python 2.6's httplib2.HTTPConnection.send()
         if self.sock is None:
             if self.auto_open:
                 self.connect()
             else:
-                raise NotConnected()
+                raise HttpLib2Error()
 
         # send the data to the server. if we get a broken pipe, then close
         # the socket. we want to reconnect when somebody tries to send again.
@@ -58,7 +60,7 @@ class _StreamingHTTPMixin:
         # NOTE: we DO propagate the error, though, because we cannot simply
         #       ignore the error... the caller will know if they can retry.
         if self.debuglevel > 0:
-            print "send:", repr(value)
+            print("send:", repr(value))
         try:
             blocksize = 8192
             if hasattr(value, 'read') :
@@ -76,16 +78,15 @@ class _StreamingHTTPMixin:
             else:
                 self.sock.sendall(value)
         except socket.error, v:
-            if v[0] == 32:      # Broken pipe
+            if v[0] == 32:
                 self.close()
-            raise
 
-class StreamingHTTPConnection(_StreamingHTTPMixin, httplib.HTTPConnection):
-    """Subclass of `httplib.HTTPConnection` that overrides the `send()` method
+class StreamingHTTPConnection(_StreamingHTTPMixin, httplib2.HTTPConnection):
+    """Subclass of `httplib2.HTTPConnection` that overrides the `send()` method
     to support iterable body objects"""
 
-class StreamingHTTPRedirectHandler(urllib2.HTTPRedirectHandler):
-    """Subclass of `urllib2.HTTPRedirectHandler` that overrides the
+class StreamingHTTPRedirectHandler(urllib3.HTTPRedirectHandler):
+    """Subclass of `urllib3.HTTPRedirectHandler` that overrides the
     `redirect_request` method to properly handle redirected POST requests
 
     This class is required because python 2.5's HTTPRedirectHandler does
@@ -93,9 +94,9 @@ class StreamingHTTPRedirectHandler(urllib2.HTTPRedirectHandler):
     the new resource, but the body of the original request is not preserved.
     """
 
-    handler_order = urllib2.HTTPRedirectHandler.handler_order - 1
+    handler_order = urllib3.HTTPRedirectHandler.handler_order - 1
 
-    # From python2.6 urllib2's HTTPRedirectHandler
+    # From python2.6 urllib3's HTTPRedirectHandler
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         """Return a Request or None in response to a redirect.
 
@@ -111,7 +112,7 @@ class StreamingHTTPRedirectHandler(urllib2.HTTPRedirectHandler):
             or code in (301, 302, 303) and m == "POST"):
             # Strictly (according to RFC 2616), 301 or 302 in response
             # to a POST MUST NOT cause a redirection without confirmation
-            # from the user (of urllib2, in this case).  In practice,
+            # from the user (of urllib3, in this case).  In practice,
             # essentially all clients do redirect in this case, so we
             # do the same.
             # be conciliant with URIs containing a space
@@ -120,18 +121,18 @@ class StreamingHTTPRedirectHandler(urllib2.HTTPRedirectHandler):
                               if k.lower() not in (
                                   "content-length", "content-type")
                              )
-            return urllib2.Request(newurl,
+            return urllib3.Request(newurl,
                            headers=newheaders,
                            origin_req_host=req.get_origin_req_host(),
                            unverifiable=True)
         else:
-            raise urllib2.HTTPError(req.get_full_url(), code, msg, headers, fp)
+            raise urllib3.HTTPError(req.get_full_url(), code, msg, headers, fp)
 
-class StreamingHTTPHandler(urllib2.HTTPHandler):
-    """Subclass of `urllib2.HTTPHandler` that uses
+class StreamingHTTPHandler(urllib3.HTTPHandler):
+    """Subclass of `urllib3.HTTPHandler` that uses
     StreamingHTTPConnection as its http connection class."""
 
-    handler_order = urllib2.HTTPHandler.handler_order - 1
+    handler_order = urllib3.HTTPHandler.handler_order - 1
 
     def http_open(self, req):
         """Open a StreamingHTTPConnection for the given request"""
@@ -148,19 +149,19 @@ class StreamingHTTPHandler(urllib2.HTTPHandler):
                 if not req.has_header('Content-length'):
                     raise ValueError(
                             "No Content-Length specified for iterable body")
-        return urllib2.HTTPHandler.do_request_(self, req)
+        return urllib3.HTTPHandler.do_request_(self, req)
 
-if hasattr(httplib, 'HTTPS'):
+if hasattr(httplib2, 'HTTPS'):
     class StreamingHTTPSConnection(_StreamingHTTPMixin,
-            httplib.HTTPSConnection):
-        """Subclass of `httplib.HTTSConnection` that overrides the `send()`
+            httplib2.HTTPSConnection):
+        """Subclass of `httplib2.HTTSConnection` that overrides the `send()`
         method to support iterable body objects"""
 
-    class StreamingHTTPSHandler(urllib2.HTTPSHandler):
-        """Subclass of `urllib2.HTTPSHandler` that uses
+    class StreamingHTTPSHandler(urllib3.HTTPSHandler):
+        """Subclass of `urllib3.HTTPSHandler` that uses
         StreamingHTTPSConnection as its http connection class."""
 
-        handler_order = urllib2.HTTPSHandler.handler_order - 1
+        handler_order = urllib3.HTTPSHandler.handler_order - 1
 
         def https_open(self, req):
             return self.do_open(StreamingHTTPSConnection, req)
@@ -174,20 +175,20 @@ if hasattr(httplib, 'HTTPS'):
                     if not req.has_header('Content-length'):
                         raise ValueError(
                                 "No Content-Length specified for iterable body")
-            return urllib2.HTTPSHandler.do_request_(self, req)
+            return urllib3.HTTPSHandler.do_request_(self, req)
 
 
 def register_openers():
-    """Register the streaming http handlers in the global urllib2 default
+    """Register the streaming http handlers in the global urllib3 default
     opener object.
 
     Returns the created OpenerDirector object."""
     handlers = [StreamingHTTPHandler, StreamingHTTPRedirectHandler]
-    if hasattr(httplib, "HTTPS"):
+    if hasattr(httplib2, "HTTPS"):
         handlers.append(StreamingHTTPSHandler)
 
-    opener = urllib2.build_opener(*handlers)
+    opener = urllib3.build_opener(*handlers)
 
-    urllib2.install_opener(opener)
+    urllib3.install_opener(opener)
 
     return opener
